@@ -9,6 +9,9 @@ import NutritionCard from "@/components/dashboard/NutritionCard";
 import GoalsCard from "@/components/dashboard/GoalsCard";
 import OnePercentCard from "@/components/dashboard/OnePercentCard";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function Home() {
   return (
     <Shell>

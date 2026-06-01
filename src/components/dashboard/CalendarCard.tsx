@@ -24,7 +24,7 @@ export default function CalendarCard() {
   const [draft, setDraft] = useState<Block>({ id: "", start: "09:00", end: "10:00", title: "", sub: "", tag: "" });
 
   useEffect(() => {
-    fetch(`/api/daily/get?date=${SENTINEL}`)
+    fetch(`/api/daily/get?date=${SENTINEL}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setState((j?.notes?.manual_calendar as CalState) ?? {}))
       .catch(() => {});

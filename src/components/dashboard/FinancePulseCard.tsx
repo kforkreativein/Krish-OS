@@ -72,7 +72,7 @@ export default function FinancePulseCard() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/finance/latest")
+    fetch("/api/finance/latest", { cache: "no-store" })
       .then(async (r) => {
         const j = await r.json().catch(() => null);
         if (!r.ok) throw new Error(j?.error || "Finance sync unavailable");

@@ -204,7 +204,7 @@ export default function NutritionCard() {
     setWeightHistory(localWeights);
     const todayWeight = localWeights.find((entry) => entry.date === d)?.weight_kg;
     if (todayWeight) setDraftWeight(String(todayWeight));
-    fetch(`/api/daily/get?date=${d}`)
+    fetch(`/api/daily/get?date=${d}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         const remote = ((j?.notes?.nutrition as Meal[] | undefined) ?? []).filter(Boolean);

@@ -3,6 +3,13 @@ import YahooFinance from "yahoo-finance2";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const noStoreHeaders = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  "Pragma": "no-cache",
+  "Expires": "0",
+};
 
 type LivePrice = {
   price: number | null;
@@ -39,7 +46,7 @@ async function googleFinanceQuote(ticker: string): Promise<LivePrice | null> {
       "accept-language": "en-US,en;q=0.9",
       "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
     },
-    next: { revalidate: 900 },
+    cache: "no-store",
   });
   if (!response.ok) return null;
 
@@ -75,7 +82,7 @@ export async function POST(req: Request) {
     : [];
 
   if (!tickers.length) {
-    return NextResponse.json({}, { headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=60" } });
+    return NextResponse.json({}, { headers: noStoreHeaders });
   }
 
   const entries = await Promise.all(tickers.map(async (ticker): Promise<[string, LivePrice]> => {
@@ -100,6 +107,6 @@ export async function POST(req: Request) {
   }));
 
   return NextResponse.json(Object.fromEntries(entries), {
-    headers: { "Cache-Control": "s-maxage=60, stale-while-revalidate=60" },
+    headers: noStoreHeaders,
   });
 }

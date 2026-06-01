@@ -18,23 +18,30 @@ function hasApiSecret(req: NextRequest): boolean {
   return Boolean(expected && ((got && got === expected) || (bearer && bearer === expected)));
 }
 
+function noStore(response: NextResponse): NextResponse {
+  response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  response.headers.set("Pragma", "no-cache");
+  response.headers.set("Expires", "0");
+  return response;
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
-  if (pathname.startsWith("/api/") && hasApiSecret(req)) return NextResponse.next();
+  if (isPublic(pathname)) return noStore(NextResponse.next());
+  if (pathname.startsWith("/api/") && hasApiSecret(req)) return noStore(NextResponse.next());
 
   const token = req.cookies.get(AUTH_COOKIE)?.value;
   const ok = await verifySessionCookie(token);
-  if (ok) return NextResponse.next();
+  if (ok) return noStore(NextResponse.next());
 
   // API routes: 401 JSON. Pages: redirect to /login.
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return noStore(NextResponse.json({ error: "unauthorized" }, { status: 401 }));
   }
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.searchParams.set("next", pathname);
-  return NextResponse.redirect(url);
+  return noStore(NextResponse.redirect(url));
 }
 
 export const config = {

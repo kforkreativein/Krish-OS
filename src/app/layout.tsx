@@ -9,6 +9,10 @@ const serif = Playfair_Display({ subsets: ["latin"], variable: "--font-serif" })
 export const metadata: Metadata = {
   title: "KRISH OS",
   description: "Personal AI operating system",
+  icons: {
+    icon: "/favicon.png?v=20260601",
+    shortcut: "/favicon.png?v=20260601",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -91,7 +91,7 @@ export default function KeyBlockersCard() {
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/tasks?status=open")
+    fetch("/api/tasks?status=open", { cache: "no-store" })
       .then((response) => response.json())
       .then((payload) => {
         if (!alive) return;

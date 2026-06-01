@@ -134,7 +134,7 @@ export default function HabitsCard() {
     setCounts(localCounts);
     completedRef.current = definitions.filter((h) => (localCounts[h.key] || 0) >= h.target).length;
     loadedRef.current = true;
-    fetch(`/api/daily/get?date=${d}`)
+    fetch(`/api/daily/get?date=${d}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         const remote = j?.notes?.habits as Counts | undefined;
