@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# Next.js
+.next/
+out/
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.local
+.env*.local
+
+# OS / editor
+.DS_Store
+
+# local agent/cache artifacts
+tmp/
+.agents/
+.claude/
+skills-lock.json
+
+# source reference PDFs, not needed at runtime
+Community Asset *.pdf
+
+# duplicate local media; app uses public/krish.jpeg
+/krish.jpeg
