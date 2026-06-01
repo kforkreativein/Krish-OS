@@ -25,10 +25,27 @@ function noStore(response: NextResponse): NextResponse {
   return response;
 }
 
+function isStateChanging(req: NextRequest): boolean {
+  return !["GET", "HEAD", "OPTIONS"].includes(req.method);
+}
+
+function hasCrossOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  try {
+    return new URL(origin).host !== req.nextUrl.host;
+  } catch {
+    return true;
+  }
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (isPublic(pathname)) return noStore(NextResponse.next());
   if (pathname.startsWith("/api/") && hasApiSecret(req)) return noStore(NextResponse.next());
+  if (pathname.startsWith("/api/") && isStateChanging(req) && hasCrossOrigin(req)) {
+    return noStore(NextResponse.json({ error: "forbidden-origin" }, { status: 403 }));
+  }
 
   const token = req.cookies.get(AUTH_COOKIE)?.value;
   const ok = await verifySessionCookie(token);

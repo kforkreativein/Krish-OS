@@ -19,7 +19,8 @@ export default function LoginPage() {
     setLoading(false);
     if (!res.ok) { setError("Wrong password."); return; }
     const params = new URLSearchParams(window.location.search);
-    window.location.href = params.get("next") || "/";
+    const next = params.get("next") || "/";
+    window.location.href = next.startsWith("/") && !next.startsWith("//") ? next : "/";
   }
 
   return (
