@@ -146,7 +146,7 @@ export default function FinancePage() {
 
         <div className="grid min-h-0 flex-1 grid-cols-[30%_1fr] gap-3">
           <div className="grid min-h-0 grid-rows-[1.08fr_0.92fr] gap-3">
-            <AssetCard num="05" title="CASHFLOW MATRIX">
+            <AssetCard num="05" title="CASHFLOW MATRIX" bodyClass="flex h-full min-h-0 flex-col overflow-y-auto p-4">
               <CashflowMatrix metrics={metrics} />
             </AssetCard>
             <AssetTabsCard
@@ -230,16 +230,17 @@ function MetricCard({ title, value, suffix, lines, chart }: {
   );
 }
 
-function AssetCard({ num, title, value, lines, tone = "ok", children }: {
+function AssetCard({ num, title, value, lines, tone = "ok", bodyClass, children }: {
   num: string;
   title: string;
   value?: string;
   lines?: string[];
   tone?: "ok" | "danger";
+  bodyClass?: string;
   children?: ReactNode;
 }) {
   return (
-    <Panel num={num} name={title} bodyClass="flex h-full min-h-0 flex-col p-5">
+    <Panel num={num} name={title} bodyClass={bodyClass ?? "flex h-full min-h-0 flex-col overflow-y-auto p-4"}>
       {children ?? (
         <>
           <div className="break-words font-mono text-4xl tracking-normal text-soft">{value}</div>
@@ -272,7 +273,7 @@ function AssetTabsCard({ active, onActive, liquidCash, investedAssets }: {
       };
 
   return (
-    <Panel num="A1" name="ASSET BASE" bodyClass="flex h-full min-h-0 flex-col p-5">
+    <Panel num="A1" name="ASSET BASE" bodyClass="flex h-full min-h-0 flex-col overflow-y-auto p-4">
       <div className="mb-4 grid grid-cols-2 gap-2">
         {[
           { key: "liquid" as const, label: "LIQUID CASH" },
@@ -315,19 +316,83 @@ function CashflowMatrix({ metrics }: { metrics: {
     { label: "PERSONAL EXPENSE", value: metrics.personalExpense, tone: "text-hot", sub: "DASHBOARD V22" },
   ];
   return (
-    <div className="grid h-full min-h-0 grid-cols-2 grid-rows-2 gap-x-5 gap-y-3">
+    <div className="grid min-h-0 grid-cols-2 gap-x-4 gap-y-4">
       {cells.map((cell) => (
-        <div key={cell.label} className="flex min-h-0 flex-col justify-between border-t border-line/80 pt-3">
+        <div key={cell.label} className="flex min-h-0 flex-col border-t border-line/80 pt-3">
           <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-muted">{cell.label}</div>
-          <div className={`mt-2 break-words font-mono text-2xl leading-none tracking-normal ${cell.tone}`}>{formatCurrency(cell.value)}</div>
-          <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.13em] text-dim">{cell.sub}</div>
+          <div className={`mt-2 break-words font-mono text-xl leading-tight tracking-normal xl:text-2xl ${cell.tone}`}>{formatCurrency(cell.value)}</div>
+          <div className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.13em] text-dim">{cell.sub}</div>
         </div>
       ))}
     </div>
   );
 }
 
+type PortfolioRow = {
+  holding: PortfolioHolding;
+  quoteKey: string;
+  currency: "INR" | "USD";
+  quantity: number;
+  cost: number;
+  value: number;
+  pnl: number;
+  displayPrice: number;
+  fallbackStatic: boolean;
+  changePercent: number | null;
+  quoteSource?: string;
+};
+
+function portfolioRows(holdings: PortfolioHolding[], prices: LivePrice): PortfolioRow[] {
+  return holdings.map((holding) => {
+    const quoteKey = quoteTicker(holding);
+    const quote = prices[quoteKey] || prices[holding.ticker];
+    const livePrice = nullableNumberValue(quote?.price);
+    const changePercent = nullableNumberValue(quote?.changePercent);
+    const fallbackStatic = livePrice == null;
+    const quantity = numberValue(holding.quantity);
+    const buyPrice = numberValue(holding.buy_price);
+    const displayPrice = fallbackStatic ? buyPrice : livePrice;
+    const cost = buyPrice * quantity;
+    const value = displayPrice * quantity;
+    const pnl = fallbackStatic ? 0 : (livePrice - buyPrice) * quantity;
+    return {
+      holding,
+      quoteKey,
+      currency: holdingCurrency(holding),
+      quantity,
+      cost,
+      value,
+      pnl,
+      displayPrice,
+      fallbackStatic,
+      changePercent,
+      quoteSource: quote?.source,
+    };
+  });
+}
+
+type CurrencyTotals = { cost: number; value: number; pnl: number };
+
+function sumByCurrency(rows: PortfolioRow[]): { INR: CurrencyTotals; USD: CurrencyTotals } {
+  const totals = {
+    INR: { cost: 0, value: 0, pnl: 0 },
+    USD: { cost: 0, value: 0, pnl: 0 },
+  };
+  for (const row of rows) {
+    const bucket = totals[row.currency];
+    bucket.cost += row.cost;
+    bucket.value += row.value;
+    bucket.pnl += row.pnl;
+  }
+  return totals;
+}
+
 function PortfolioMatrix({ holdings, prices }: { holdings: PortfolioHolding[]; prices: LivePrice }) {
+  const rows = useMemo(() => portfolioRows(holdings, prices), [holdings, prices]);
+  const totals = useMemo(() => sumByCurrency(rows), [rows]);
+  const hasInr = rows.some((row) => row.currency === "INR");
+  const hasUsd = rows.some((row) => row.currency === "USD");
+
   return (
     <Panel num="04" name="LIVE PORTFOLIO" bodyClass="flex h-full min-h-0 flex-col p-0">
       <div className="grid grid-cols-[1.1fr_0.7fr_1fr_1fr_1fr] border-b border-line px-4 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-muted">
@@ -337,42 +402,74 @@ function PortfolioMatrix({ holdings, prices }: { holdings: PortfolioHolding[]; p
         <span className="text-right">LTP (Live)</span>
         <span className="text-right">P&amp;L</span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto pb-20 pr-1">
-        {holdings.length === 0 && (
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {rows.length === 0 && (
           <div className="px-4 py-8 text-sm text-muted">No portfolio holdings saved yet. Run the finance snapshot sync.</div>
         )}
-        {holdings.map((holding) => {
-          const quoteKey = quoteTicker(holding);
-          const quote = prices[quoteKey] || prices[holding.ticker];
-          const livePrice = nullableNumberValue(quote?.price);
-          const changePercent = nullableNumberValue(quote?.changePercent);
-          const fallbackStatic = livePrice == null;
-          const displayPrice = fallbackStatic ? numberValue(holding.buy_price) : livePrice;
-          const pnl = fallbackStatic ? 0 : (livePrice - numberValue(holding.buy_price)) * numberValue(holding.quantity);
-          const positive = pnl >= 0;
-          const currency = holdingCurrency(holding);
-          return (
-            <div
-              key={`${holding.ticker}-${holding.buy_price}-${holding.quantity}`}
-              className="grid grid-cols-[1.1fr_0.7fr_1fr_1fr_1fr] items-center border-b border-line px-4 py-2.5 font-mono text-sm tabular-nums last:border-0 hover:bg-white/[0.025]"
-              style={{ fontVariantNumeric: "tabular-nums" }}
-            >
-              <div className="min-w-0">
-                <div className="truncate text-soft">{holding.raw_ticker || holding.ticker}</div>
-                <div className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-muted">{quoteKey}</div>
-              </div>
-              <span className="text-right text-soft/80">{formatPlain(numberValue(holding.quantity))}</span>
-              <span className="text-right text-soft/80">{formatCurrencyFor(numberValue(holding.buy_price), currency)}</span>
-              <span className={`text-right ${fallbackStatic ? "text-muted" : changePercent && changePercent < 0 ? "text-hot" : "text-ok"}`}>
-                {formatCurrencyFor(displayPrice, currency)}
-                <span className="ml-2 text-[10px] text-muted">{fallbackStatic ? "static" : `${quote?.source || "live"} ${(changePercent ?? 0).toFixed(2)}%`}</span>
-              </span>
-              <span className={`text-right ${fallbackStatic ? "text-muted" : positive ? "text-ok" : "text-hot"}`}>{formatCurrencyFor(pnl, currency)}</span>
+        {rows.map((row) => (
+          <div
+            key={`${row.holding.ticker}-${row.holding.buy_price}-${row.holding.quantity}`}
+            className="grid grid-cols-[1.1fr_0.7fr_1fr_1fr_1fr] items-center border-b border-line px-4 py-2.5 font-mono text-sm tabular-nums hover:bg-white/[0.025]"
+            style={{ fontVariantNumeric: "tabular-nums" }}
+          >
+            <div className="min-w-0">
+              <div className="truncate text-soft">{row.holding.raw_ticker || row.holding.ticker}</div>
+              <div className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-muted">{row.quoteKey}</div>
             </div>
-          );
-        })}
+            <span className="text-right text-soft/80">{formatPlain(row.quantity)}</span>
+            <span className="text-right text-soft/80">{formatCurrencyFor(row.holding.buy_price, row.currency)}</span>
+            <span className={`text-right ${row.fallbackStatic ? "text-muted" : row.changePercent && row.changePercent < 0 ? "text-hot" : "text-ok"}`}>
+              {formatCurrencyFor(row.displayPrice, row.currency)}
+              <span className="ml-2 text-[10px] text-muted">
+                {row.fallbackStatic ? "static" : `${row.quoteSource || "live"} ${(row.changePercent ?? 0).toFixed(2)}%`}
+              </span>
+            </span>
+            <span className={`text-right ${row.fallbackStatic ? "text-muted" : row.pnl >= 0 ? "text-ok" : "text-hot"}`}>
+              {formatCurrencyFor(row.pnl, row.currency)}
+            </span>
+          </div>
+        ))}
       </div>
+      {rows.length > 0 && (
+        <div className="flex-shrink-0 border-t border-line bg-black/55">
+          {hasInr && (
+            <PortfolioTotalRow label="TOTAL (INR)" currency="INR" totals={totals.INR} positions={rows.filter((r) => r.currency === "INR").length} />
+          )}
+          {hasUsd && (
+            <PortfolioTotalRow label="TOTAL (USD)" currency="USD" totals={totals.USD} positions={rows.filter((r) => r.currency === "USD").length} />
+          )}
+        </div>
+      )}
     </Panel>
+  );
+}
+
+function PortfolioTotalRow({
+  label,
+  currency,
+  totals,
+  positions,
+}: {
+  label: string;
+  currency: "INR" | "USD";
+  totals: CurrencyTotals;
+  positions: number;
+}) {
+  const positive = totals.pnl >= 0;
+  return (
+    <div
+      className="grid grid-cols-[1.1fr_0.7fr_1fr_1fr_1fr] items-center px-4 py-3 font-mono text-sm tabular-nums"
+      style={{ fontVariantNumeric: "tabular-nums" }}
+    >
+      <div>
+        <div className="text-[11px] uppercase tracking-[0.14em] text-soft">{label}</div>
+        <div className="mt-0.5 text-[10px] text-muted">{positions} position{positions === 1 ? "" : "s"}</div>
+      </div>
+      <span className="text-right text-muted">—</span>
+      <span className="text-right text-soft">{formatCurrencyFor(totals.cost, currency)}</span>
+      <span className="text-right text-soft">{formatCurrencyFor(totals.value, currency)}</span>
+      <span className={`text-right font-medium ${positive ? "text-ok" : "text-hot"}`}>{formatCurrencyFor(totals.pnl, currency)}</span>
+    </div>
   );
 }
 

@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DndContext, DragEndEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { URGENCIES, type Task, type Urgency } from "@/lib/types";
 
 export default function KanbanView({
@@ -12,16 +21,21 @@ export default function KanbanView({
   onOpen: (t: Task) => void;
 }) {
   const [mounted, setMounted] = useState(false);
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   useEffect(() => setMounted(true), []);
 
+  const activeTask = activeId ? tasks.find((task) => task.id === activeId) : null;
+
   function handleDragEnd(e: DragEndEvent) {
+    setActiveId(null);
     if (!e.over) return;
     const id = String(e.active.id);
     const urgency = e.over.id as Urgency;
-    const dest = tasks.filter((t) => t.urgency === urgency);
-    const maxScore = dest.reduce((m, t) => Math.max(m, t.priority_score), 0);
+    if (!URGENCIES.includes(urgency)) return;
+    const dest = tasks.filter((task) => task.urgency === urgency);
+    const maxScore = dest.reduce((max, task) => Math.max(max, task.priority_score), 0);
     onMove(id, urgency, maxScore + 10);
   }
 
@@ -38,12 +52,24 @@ export default function KanbanView({
   }
 
   return (
-    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      onDragStart={(event) => setActiveId(String(event.active.id))}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setActiveId(null)}
+    >
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         {URGENCIES.map((u, i) => (
           <Column key={u} num={numbers[i]} urgency={u} tasks={tasks.filter((t) => t.urgency === u)} onOpen={onOpen} />
         ))}
       </div>
+      <DragOverlay>
+        {activeTask ? (
+          <div className="min-h-[132px] rounded-[8px] border border-teal/45 bg-white/[0.06] p-4 shadow-lg">
+            <TaskCardInner task={activeTask} />
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   );
 }
@@ -56,16 +82,20 @@ function StaticColumn({ urgency, tasks, onOpen }: { num: string; urgency: Urgenc
         <span className="font-mono text-[10px] text-muted">{tasks.length}</span>
       </header>
       <div className="space-y-3 pt-4">
-        {(tasks.length ? tasks : seedCards(urgency)).map((task) => (
-          <button
-            key={task.id}
-            onClick={() => tasks.length && onOpen(task)}
-            className="min-h-[132px] w-full rounded-[8px] border border-line bg-white/[0.035] p-4 text-left hover:border-dim"
-            type="button"
-          >
-            <TaskCardInner task={task} />
-          </button>
-        ))}
+        {tasks.length === 0 ? (
+          <div className="rounded-[8px] border border-dashed border-line p-6 text-center text-xs text-muted">No tasks</div>
+        ) : (
+          tasks.map((task) => (
+            <button
+              key={task.id}
+              onClick={() => onOpen(task)}
+              className="min-h-[132px] w-full rounded-[8px] border border-line bg-white/[0.035] p-4 text-left hover:border-dim"
+              type="button"
+            >
+              <TaskCardInner task={task} />
+            </button>
+          ))
+        )}
       </div>
     </div>
   );
@@ -74,19 +104,23 @@ function StaticColumn({ urgency, tasks, onOpen }: { num: string; urgency: Urgenc
 function Column({ num, urgency, tasks, onOpen }: { num: string; urgency: Urgency; tasks: Task[]; onOpen: (t: Task) => void }) {
   const { setNodeRef, isOver } = useDroppable({ id: urgency });
   return (
-    <div ref={setNodeRef} className={`min-h-[360px] ${isOver ? "rounded-[8px] border border-teal/50" : ""}`}>
+    <div ref={setNodeRef} className={`min-h-[360px] rounded-[8px] ${isOver ? "border border-teal/50 bg-teal/[0.03]" : ""}`}>
       <header className="flex items-center justify-between border-b border-line pb-3">
         <span className="card-head"><span className={urgency === "Today" ? "text-hot" : urgency === "This Week" ? "text-warn" : "text-muted"}>●</span> <span className="text-soft">{urgency.toUpperCase()}</span></span>
         <span className="font-mono text-[10px] text-muted">{tasks.length}</span>
       </header>
       <div className="space-y-3 pt-4">
-        {(tasks.length ? tasks : seedCards(urgency)).map((t) => <Card key={t.id} task={t} onOpen={onOpen} inert={!tasks.length} />)}
+        {tasks.length === 0 ? (
+          <div className="rounded-[8px] border border-dashed border-line p-6 text-center text-xs text-muted">Drop tasks here</div>
+        ) : (
+          tasks.map((t) => <Card key={t.id} task={t} onOpen={onOpen} />)
+        )}
       </div>
     </div>
   );
 }
 
-function Card({ task, onOpen, inert }: { task: Task; onOpen: (t: Task) => void; inert?: boolean }) {
+function Card({ task, onOpen }: { task: Task; onOpen: (t: Task) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: task.id });
   const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
   return (
@@ -95,9 +129,9 @@ function Card({ task, onOpen, inert }: { task: Task; onOpen: (t: Task) => void; 
       style={style}
       {...attributes}
       {...listeners}
-      onClick={() => !inert && onOpen(task)}
+      onClick={() => onOpen(task)}
       className={`min-h-[132px] rounded-[8px] border border-line bg-white/[0.035] p-4 cursor-grab active:cursor-grabbing ${
-        isDragging ? "opacity-50" : "hover:border-dim"
+        isDragging ? "opacity-40" : "hover:border-dim"
       }`}
     >
       <TaskCardInner task={task} />
@@ -127,27 +161,4 @@ function TaskCardInner({ task }: { task: Task }) {
       </div>
     </div>
   );
-}
-
-function seedCards(urgency: Urgency): Task[] {
-  const titles: Record<Urgency, string[]> = {
-    Today: ["Reply to partnership inbound", "Review weekly metrics with team"],
-    "This Week": ["Finalize speaker deck", "Refresh pricing analysis doc"],
-    "This Month": ["Advisor agreement signed", "Quarterly catch-up deck"],
-    Someday: ["Design crit on finance tab", "Infra chat hiring signal"],
-  };
-  return titles[urgency].map((title, index) => ({
-    id: `${urgency}-${index}`,
-    title,
-    description: null,
-    urgency,
-    key: index === 0,
-    priority_score: (index + 1) * 10,
-    tags: [index === 0 ? "Advisor" : "Investor"],
-    due_date: null,
-    entity_id: null,
-    owner: null,
-    completed_at: null,
-    created_at: new Date().toISOString(),
-  }));
 }

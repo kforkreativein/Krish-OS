@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Panel from "../Panel";
 import { localDateKey } from "@/lib/date";
+import { useDailyDate } from "@/lib/use-daily-date";
 
 interface Meal {
   id: string;
@@ -193,26 +194,41 @@ export default function NutritionCard() {
   const [redistributingId, setRedistributingId] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
-  useEffect(() => {
-    const d = localDateKey();
+  const loadDateData = useCallback((d: string) => {
     setDate(d);
     setMeals(loadLocal(d));
     const h = loadHealth(d);
     setHealth(h);
     setWorkouts(loadWorkouts(d));
+    setDraftLabel("");
+    setDraftKcal("");
+    setEstimatedMacros(null);
+    setEditingMealId(null);
     const localWeights = loadWeightHistory();
     setWeightHistory(localWeights);
     const todayWeight = localWeights.find((entry) => entry.date === d)?.weight_kg;
-    if (todayWeight) setDraftWeight(String(todayWeight));
+    setDraftWeight(todayWeight ? String(todayWeight) : "");
     fetch(`/api/daily/get?date=${d}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        const remote = ((j?.notes?.nutrition as Meal[] | undefined) ?? []).filter(Boolean);
-        if (remote.length) {
-          setMeals(remote);
-          saveLocal(d, remote);
+        const remoteMeals = ((j?.notes?.nutrition as Meal[] | undefined) ?? []).filter(Boolean);
+        if (remoteMeals.length) {
+          setMeals(remoteMeals);
+          saveLocal(d, remoteMeals);
+        }
+        const remoteWorkouts = (j?.notes?.workouts as WorkoutEntry[] | undefined) ?? [];
+        if (remoteWorkouts.length) {
+          setWorkouts(remoteWorkouts);
+          saveWorkouts(d, remoteWorkouts);
         }
         const remoteHealth = j?.notes?.health as (HealthStats & { weight_history_recent?: WeightEntry[] }) | undefined;
+        if (remoteHealth) {
+          const { weight_history_recent: _history, ...dayHealth } = remoteHealth;
+          const merged = { ...h, ...dayHealth };
+          setHealth(merged);
+          saveHealth(d, merged);
+          if (dayHealth.weight_kg) setDraftWeight(String(dayHealth.weight_kg));
+        }
         const remoteHistory = Array.isArray(remoteHealth?.weight_history_recent) ? remoteHealth.weight_history_recent : [];
         const remoteWeight = Number(remoteHealth?.weight_kg);
         let nextWeights = localWeights;
@@ -233,6 +249,15 @@ export default function NutritionCard() {
         }
       })
       .catch(() => {});
+  }, []);
+
+  const activeDate = useDailyDate(loadDateData);
+
+  useEffect(() => {
+    if (activeDate) loadDateData(activeDate);
+  }, [activeDate, loadDateData]);
+
+  useEffect(() => {
     const t = setInterval(() => setTick((x) => x + 1), 60_000);
     return () => clearInterval(t);
   }, []);

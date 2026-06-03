@@ -25,3 +25,8 @@ Community Asset *.pdf
 
 # duplicate local media; app uses public/krish.jpeg
 /krish.jpeg
+
+# OS Spec Files
+os_spec.md
+agency_os_update.md
+finance_fix.md

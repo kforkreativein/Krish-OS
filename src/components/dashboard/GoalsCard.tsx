@@ -1,61 +1,69 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Panel from "../Panel";
-
-const LS_KEY_WEEKLY = "pos.goals.weekly";
-const LS_KEY_MONTHLY = "pos.goals.monthly";
-const LS_KEY_WEEKLY_LIST = "pos.goals.weekly.list.v1";
-const LS_KEY_MONTHLY_LIST = "pos.goals.monthly.list.v1";
-
-type Goal = { id: string; text: string; done: boolean };
-
-function readGoals(listKey: string, legacyKey: string): Goal[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(listKey);
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (Array.isArray(parsed)) return parsed.filter((goal) => typeof goal?.text === "string" && goal.text.trim());
-    const legacy = localStorage.getItem(legacyKey)?.trim();
-    return legacy ? [{ id: crypto.randomUUID(), text: legacy, done: false }] : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveGoals(key: string, goals: Goal[]) {
-  try {
-    localStorage.setItem(key, JSON.stringify(goals));
-  } catch {}
-}
+import {
+  type Goal,
+  LS_KEY_MONTHLY,
+  LS_KEY_MONTHLY_LIST,
+  LS_KEY_WEEKLY,
+  LS_KEY_WEEKLY_LIST,
+  loadGoalsFromServer,
+  readGoals,
+  saveGoalsList,
+  syncGoalsToServer,
+} from "@/lib/goals-storage";
 
 export default function GoalsCard() {
   const [weekly, setWeekly] = useState<Goal[]>([]);
   const [monthly, setMonthly] = useState<Goal[]>([]);
   const [weeklyDraft, setWeeklyDraft] = useState("");
   const [monthlyDraft, setMonthlyDraft] = useState("");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     const nextWeekly = readGoals(LS_KEY_WEEKLY_LIST, LS_KEY_WEEKLY);
     const nextMonthly = readGoals(LS_KEY_MONTHLY_LIST, LS_KEY_MONTHLY);
     setWeekly(nextWeekly);
     setMonthly(nextMonthly);
-    saveGoals(LS_KEY_WEEKLY_LIST, nextWeekly);
-    saveGoals(LS_KEY_MONTHLY_LIST, nextMonthly);
+    setHydrated(true);
+    void loadGoalsFromServer().then((remote) => {
+      if (!remote) return;
+      if (remote.weekly.length) {
+        setWeekly(remote.weekly);
+        saveGoalsList(LS_KEY_WEEKLY_LIST, remote.weekly);
+      }
+      if (remote.monthly.length) {
+        setMonthly(remote.monthly);
+        saveGoalsList(LS_KEY_MONTHLY_LIST, remote.monthly);
+      }
+    });
   }, []);
 
-  function updateWeekly(next: Goal[]) {
-    setWeekly(next);
-    saveGoals(LS_KEY_WEEKLY_LIST, next);
-  }
+  const persistGoals = useCallback((nextWeekly: Goal[], nextMonthly: Goal[]) => {
+    saveGoalsList(LS_KEY_WEEKLY_LIST, nextWeekly);
+    saveGoalsList(LS_KEY_MONTHLY_LIST, nextMonthly);
+    if (hydrated) void syncGoalsToServer(nextWeekly, nextMonthly);
+  }, [hydrated]);
 
-  function updateMonthly(next: Goal[]) {
+  const updateWeekly = useCallback((next: Goal[]) => {
+    setWeekly(next);
+    setMonthly((currentMonthly) => {
+      persistGoals(next, currentMonthly);
+      return currentMonthly;
+    });
+  }, [persistGoals]);
+
+  const updateMonthly = useCallback((next: Goal[]) => {
     setMonthly(next);
-    saveGoals(LS_KEY_MONTHLY_LIST, next);
-  }
+    setWeekly((currentWeekly) => {
+      persistGoals(currentWeekly, next);
+      return currentWeekly;
+    });
+  }, [persistGoals]);
 
   return (
-    <Panel num="09" name="GOALS" bodyClass="goals-body p-4">
+    <Panel num="09" name="GOALS" className="goals-card" bodyClass="goals-body p-4">
       <div className="grid h-full min-h-0 gap-3 sm:grid-cols-2">
         <GoalList
           label="THIS WEEK"
@@ -110,11 +118,11 @@ function GoalList({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
-      <div className="terminal-label mb-1 flex items-center justify-between">
+      <div className="terminal-label mb-1 flex flex-shrink-0 items-center justify-between">
         <span>{label}</span>
         <span className="text-dim">{goals.filter((goal) => goal.done).length}/{goals.length}</span>
       </div>
-      <div className="mb-2 flex gap-2">
+      <div className="mb-2 flex flex-shrink-0 gap-2">
         <input
           value={draft}
           onChange={(event) => onDraft(event.target.value)}
@@ -132,6 +140,11 @@ function GoalList({
         </button>
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1 [scrollbar-width:thin]">
+        {goals.length === 0 && (
+          <div className="rounded-[7px] border border-dashed border-line px-2 py-3 text-center text-[11px] text-muted">
+            No goals yet.
+          </div>
+        )}
         {goals.map((goal) => (
           <div key={goal.id} className="group grid grid-cols-[18px_1fr_16px] items-center gap-1.5 rounded-[7px] border border-line bg-black/25 px-2 py-1.5">
             <input

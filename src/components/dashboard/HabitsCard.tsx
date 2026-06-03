@@ -3,16 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Panel from "../Panel";
 import { localDateKey } from "@/lib/date";
-
-type HabitPriority = "low" | "medium" | "high";
-interface HabitDef { key: string; name: string; category: string; target: number; priority: HabitPriority; daily?: boolean }
-type Counts = Record<string, number>;
+import {
+  type HabitCounts,
+  type HabitDef,
+  type HabitPriority,
+  HABITS_EVENT,
+  loadHabitCounts,
+  loadHabitDefinitions,
+  saveHabitCounts,
+  saveHabitDefinitions,
+} from "@/lib/habits-storage";
 
 const DEFAULT_HABITS: HabitDef[] = [];
 
-const LS_PREFIX = "pos.habits.";
-const DEFS_KEY = "pos.habits.definitions.v2";
-const HABITS_EVENT = "pos:habits-updated";
 const CONFETTI_PIECES = Array.from({ length: 72 }, (_, index) => ({
   id: index,
   left: `${(index * 37) % 100}%`,
@@ -21,49 +24,6 @@ const CONFETTI_PIECES = Array.from({ length: 72 }, (_, index) => ({
   color: ["#22c55e", "#16a34a", "#f59e0b", "#ef4444", "#ededed"][index % 5],
   rotate: `${(index * 47) % 360}deg`,
 }));
-
-function loadLocal(date: string): Counts {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(LS_PREFIX + date);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveLocal(date: string, c: Counts) {
-  try {
-    localStorage.setItem(LS_PREFIX + date, JSON.stringify(c));
-  } catch {}
-}
-
-function loadDefinitions(): HabitDef[] {
-  if (typeof window === "undefined") return DEFAULT_HABITS;
-  try {
-    const raw = localStorage.getItem(DEFS_KEY);
-    const parsed = raw ? JSON.parse(raw) : null;
-    const definitions = Array.isArray(parsed) && parsed.length
-      ? parsed.map((habit) => ({ ...habit, daily: habit.daily ?? true }))
-      : DEFAULT_HABITS;
-    return definitions.filter((habit) => {
-      const isLegacyDefaultWorkout =
-        habit.name === "Workout" &&
-        habit.category === "FITNESS" &&
-        habit.target === 1 &&
-        habit.daily === true;
-      return !isLegacyDefaultWorkout;
-    });
-  } catch {
-    return DEFAULT_HABITS;
-  }
-}
-
-function saveDefinitions(habits: HabitDef[]) {
-  try {
-    localStorage.setItem(DEFS_KEY, JSON.stringify(habits));
-  } catch {}
-}
 
 function makeKey(name: string) {
   return `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "habit"}-${Date.now().toString(36)}`;
@@ -116,8 +76,10 @@ function launchConfetti() {
 
 export default function HabitsCard() {
   const [date, setDate] = useState<string | null>(null);
-  const [counts, setCounts] = useState<Counts>({});
-  const [habits, setHabits] = useState<HabitDef[]>(DEFAULT_HABITS);
+  const [counts, setCounts] = useState<HabitCounts>({});
+  const [habits, setHabits] = useState<HabitDef[]>(() =>
+    typeof window !== "undefined" ? loadHabitDefinitions() : DEFAULT_HABITS,
+  );
   const [draftName, setDraftName] = useState("");
   const [draftCategory, setDraftCategory] = useState("PERSONAL");
   const [draftPriority, setDraftPriority] = useState<HabitPriority>("medium");
@@ -127,8 +89,8 @@ export default function HabitsCard() {
   const userActionRef = useRef(false);
   const completedRef = useRef(0);
 
-  const loadDay = useCallback((d: string, definitions: HabitDef[] = loadDefinitions()): void => {
-    const localCounts = loadLocal(d);
+  const loadDay = useCallback((d: string, definitions: HabitDef[] = loadHabitDefinitions()): void => {
+    const localCounts = loadHabitCounts(d);
     setDate(d);
     setHabits(definitions);
     setCounts(localCounts);
@@ -137,11 +99,12 @@ export default function HabitsCard() {
     fetch(`/api/daily/get?date=${d}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        const remote = j?.notes?.habits as Counts | undefined;
+        const remote = j?.notes?.habits as HabitCounts | undefined;
         if (remote && Object.keys(remote).length) {
-          setCounts(remote);
-          saveLocal(d, remote);
-          completedRef.current = definitions.filter((h) => (remote[h.key] || 0) >= h.target).length;
+          const merged = { ...localCounts, ...remote };
+          setCounts(merged);
+          saveHabitCounts(d, merged);
+          completedRef.current = definitions.filter((h) => (merged[h.key] || 0) >= h.target).length;
         }
       })
       .catch(() => {});
@@ -152,7 +115,7 @@ export default function HabitsCard() {
   }, [loadDay]);
 
   useEffect(() => {
-    const handleHabitsUpdated = () => loadDay(localDateKey(), loadDefinitions());
+    const handleHabitsUpdated = () => loadDay(localDateKey(), loadHabitDefinitions());
     window.addEventListener(HABITS_EVENT, handleHabitsUpdated);
     return () => window.removeEventListener(HABITS_EVENT, handleHabitsUpdated);
   }, [loadDay]);
@@ -175,10 +138,6 @@ export default function HabitsCard() {
   }, [habits, loadDay]);
 
   useEffect(() => {
-    saveDefinitions(habits);
-  }, [habits]);
-
-  useEffect(() => {
     if (!loadedRef.current) return;
     const completed = habits.filter((h) => (counts[h.key] || 0) >= h.target).length;
     if (userActionRef.current && completed > completedRef.current) {
@@ -188,9 +147,9 @@ export default function HabitsCard() {
     completedRef.current = completed;
   }, [counts, habits]);
 
-  const sync = useCallback(async (next: Counts) => {
+  const sync = useCallback(async (next: HabitCounts) => {
     if (!date) return;
-    saveLocal(date, next);
+    saveHabitCounts(date, next);
     await fetch("/api/daily/upsert", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -227,8 +186,8 @@ export default function HabitsCard() {
   function addHabit() {
     const name = draftName.trim();
     if (!name) return;
-    setHabits((current) => [
-      ...current,
+    const next = [
+      ...habits,
       {
         key: makeKey(name),
         name,
@@ -237,7 +196,9 @@ export default function HabitsCard() {
         priority: draftPriority,
         daily: draftDaily,
       },
-    ]);
+    ];
+    setHabits(next);
+    saveHabitDefinitions(next);
     setDraftName("");
     setDraftDaily(true);
   }

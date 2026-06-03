@@ -39,6 +39,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [{ source: "/review", destination: "/", permanent: false }];
+  },
   async headers() {
     return [
       {

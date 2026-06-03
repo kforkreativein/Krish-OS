@@ -128,7 +128,22 @@ html, body {
     padding: 12px 12px 14px;
   }
 
+  .home-dashboard .goals-card {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .home-dashboard .goals-card > header {
+    flex: 0 0 auto;
+  }
+
   .home-dashboard .goals-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
     padding: 9px 12px 11px;
   }
 
@@ -221,9 +236,86 @@ html, body {
   .home-dashboard input {
     font-size: 13px;
   }
+
+  .health-dashboard {
+    display: grid;
+    grid-template-columns: minmax(520px, 1.55fr) minmax(340px, 1fr);
+    gap: 14px;
+    height: calc(100dvh - 96px);
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .health-stack {
+    display: grid;
+    min-height: 0;
+    min-width: 0;
+    gap: 14px;
+    overflow: hidden;
+  }
+
+  .health-main {
+    grid-template-rows: 1fr;
+  }
+
+  .health-side {
+    grid-template-rows: 1.05fr 0.9fr 0.85fr;
+  }
+
+  .health-dashboard .card {
+    min-height: 0;
+  }
+
+  .health-dashboard .card > header {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .health-dashboard .card > div {
+    min-height: 0;
+    overflow: hidden;
+    padding: 12px;
+  }
+
+  .health-dashboard .habits-body,
+  .health-dashboard .goals-body,
+  .health-dashboard .one-percent-body,
+  .health-dashboard .nutrition-card > .nutrition-body {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .health-dashboard .nutrition-card > .nutrition-body {
+    overflow-y: auto;
+  }
+
+  .health-dashboard .habits-card,
+  .health-dashboard .goals-card,
+  .health-dashboard .one-percent-card,
+  .health-dashboard .nutrition-card {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+  }
 }
 
 @media (max-width: 1279px) {
+  .health-dashboard {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    min-width: 0;
+  }
+
+  .health-stack {
+    display: grid;
+    gap: 16px;
+    min-width: 0;
+  }
+
   .home-dashboard {
     display: grid;
     grid-template-columns: 1fr;

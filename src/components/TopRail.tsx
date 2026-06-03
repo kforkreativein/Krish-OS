@@ -6,11 +6,10 @@ import { useEffect, useState } from "react";
 
 const TABS = [
   { href: "/", label: "HOME" },
-  { href: "/crm", label: "CRM" },
+  { href: "/crm", label: "AGENCY" },
   { href: "/brain", label: "BRAIN" },
   { href: "/finance", label: "FINANCE" },
   { href: "/health", label: "HEALTH" },
-  { href: "/review", label: "REVIEW" },
 ];
 
 type MarketQuote = {
@@ -103,7 +102,6 @@ export default function TopRail() {
           <div className="flex items-center gap-3 border-l border-line pl-4">
             <span className="text-muted">{dateStr}</span>
             <span className="text-soft">{timeStr.slice(0, 5)}</span>
-            <span className="rounded-md border border-line bg-white/[0.04] px-2 py-1 text-[10px] text-soft">KC</span>
           </div>
         </div>
       </div>

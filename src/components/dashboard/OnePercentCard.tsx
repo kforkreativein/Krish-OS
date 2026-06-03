@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Panel from "../Panel";
 import { addDays, localDateKey } from "@/lib/date";
+import { syncOnePercentToHabits } from "@/lib/habits-storage";
 
 interface ImprovementLog {
   date: string;
@@ -62,11 +63,14 @@ export default function OnePercentCard() {
     ].filter((item) => item.text.trim()).slice(0, 14);
     setLogs(next);
     saveLogs(next);
-    await fetch("/api/daily/upsert", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date: today, patch: { one_percent: next[0] } }),
-    }).catch(() => {});
+    await Promise.all([
+      fetch("/api/daily/upsert", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ date: today, patch: { one_percent: next[0] } }),
+      }).catch(() => {}),
+      syncOnePercentToHabits(today, nextText, nextArea),
+    ]);
   }, [logs, today]);
 
   return (
